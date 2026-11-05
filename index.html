@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Regangan Dinamik PJ</title>
+<style>
+  /* ===== Warna & fon: suasana gelanggang sekolah (biru tinta + kuning wisel) ===== */
+  :root {
+    --tinta: #14213d;
+    --kertas: #f3f5fa;
+    --kuning: #ffc300;
+    --garis: #d5dbe8;
+    --betul: #1b8a3a;
+    --salah: #c8281e;
+    --neutral: #4a5675;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--kertas); color: var(--tinta);
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 14px 14px 32px; }
+
+  /* ===== Tajuk ===== */
+  header { border-left: 8px solid var(--kuning); padding-left: 12px; margin-bottom: 14px; }
+  h1 { margin: 0; font-size: 1.7rem; letter-spacing: -.5px; }
+  header p { margin: 4px 0 0; color: var(--neutral); line-height: 1.4; font-size: .95rem; }
+
+  /* ===== Kad pilihan regangan ===== */
+  .kad {
+    width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+    background: #fff; border: 2px solid var(--garis); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+  }
+  .kad[aria-pressed="true"] { border-color: var(--tinta); box-shadow: 4px 4px 0 var(--kuning); }
+  .kad b { display: block; font-size: 1.05rem; }
+  .kad span { font-size: .88rem; color: var(--neutral); }
+
+  /* ===== Butang & kotak semak ===== */
+  .baris { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  button.btn {
+    flex: 1 1 30%; min-height: 48px; font: inherit; font-weight: 700; cursor: pointer;
+    border: 2px solid var(--tinta); border-radius: 10px; background: #fff; color: var(--tinta);
+  }
+  button.btn.utama { background: var(--tinta); color: #fff; }
+  button.btn:disabled { opacity: .4; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--kuning); outline-offset: 2px; }
+  label.pilih { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: .98rem; }
+  label.pilih input { width: 22px; height: 22px; }
+
+  /* ===== Video + kanvas ===== */
+  .pentas {
+    position: relative; width: 100%; background: #0b1224; border-radius: 12px; overflow: hidden;
+    aspect-ratio: 3 / 4; max-height: 70vh; margin: 0 auto;
+  }
+  .pentas.cermin { transform: scaleX(-1); }   /* paparan cermin: hanya video & lukisan, bukan teks */
+  .pentas video, .pentas canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .kosong {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px;
+    color: #9fb0d6; font-size: .95rem;
+  }
+  .cermin .kosong { transform: scaleX(-1); }
+
+  /* ===== Panel keputusan ===== */
+  #panel {
+    margin-top: 12px; border-radius: 12px; padding: 18px 14px; text-align: center; color: #fff;
+    background: var(--neutral); min-height: 128px; display: flex; flex-direction: column; justify-content: center;
+  }
+  #panel.betul { background: var(--betul); }
+  #panel.salah { background: var(--salah); }
+  #keputusan { font-size: 2.6rem; font-weight: 900; letter-spacing: 1px; line-height: 1; }
+  #mesej { margin-top: 8px; font-size: 1.2rem; font-weight: 700; line-height: 1.3; }
+  #sudut { margin-top: 6px; font-size: .85rem; opacity: .85; }
+  .nota { font-size: .8rem; color: var(--neutral); margin-top: 14px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Regangan Dinamik PJ</h1>
+    <p>Letakkan telefon di hadapan murid, buka kamera dan lihat sama ada regangan dilakukan dengan betul. Video diproses di telefon sahaja.</p>
+  </header>
+
+  <!-- Kad pilihan regangan (dijana oleh JavaScript supaya mudah ditambah) -->
+  <div id="senaraiKad" role="group" aria-label="Pilih regangan"></div>
+
+  <div class="baris">
+    <button class="btn utama" id="btnBuka">Buka Kamera</button>
+    <button class="btn" id="btnTukar" disabled>Tukar Kamera</button>
+    <button class="btn" id="btnHenti" disabled>Henti</button>
+  </div>
+  <div class="baris">
+    <label class="pilih"><input type="checkbox" id="cbBunyi" checked> Bunyi</label>
+    <label class="pilih"><input type="checkbox" id="cbCermin" checked> Paparan cermin</label>
+  </div>
+
+  <div class="pentas cermin" id="pentas">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="kanvas"></canvas>
+    <div class="kosong" id="kosong">Tekan “Buka Kamera” untuk bermula.</div>
+  </div>
+
+  <div id="panel" aria-live="polite">
+    <div id="keputusan">MENUNGGU</div>
+    <div id="mesej">Buka kamera untuk mula</div>
+    <div id="sudut"></div>
+  </div>
+
+  <p class="nota">Tip: pastikan seluruh badan murid dalam bingkai dan cahaya mencukupi. Tiada video disimpan atau dihantar ke mana-mana pelayan.</p>
+</main>
+
+<script type="module">
+/* =====================================================================
+   1. PEMALAR (ubah di sini jika perlu)
+   ===================================================================== */
+const AMBANG_SENGET_DARJAH = 15;   // Sudut senget minimum garisan bahu dari mendatar
+const AMBANG_NAMPAK = 0.5;         // Kebarangkalian minimum titik dianggap kelihatan
+const BINGKAI_STABIL = 3;          // Bilangan bingkai berturut-turut sebelum keputusan bertukar (kurangkan kelipan)
+
+const VERSI = "0.10.14";
+const CDN = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VERSI}`;
+const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+
+/* Indeks titik badan MediaPipe */
+const HIDUNG = 0, BAHU_KIRI = 11, BAHU_KANAN = 12, TANGAN_KIRI = 15, TANGAN_KANAN = 16;
+
+/* =====================================================================
+   2. PERATURAN REGANGAN
+   Setiap peraturan menerima senarai titik dan memulangkan
+   { status: 'betul' | 'salah' | 'tiada', mesej, sudut }
+   ===================================================================== */
+const SENARAI_REGANGAN = [
+  {
+    id: "sisi-badan",
+    nama: "Regangan Sisi Badan",
+    huraian: "Angkat kedua-dua tangan ke atas kepala, kemudian bengkokkan badan ke sisi.",
+    semak(t) {
+      const perlu = [HIDUNG, BAHU_KIRI, BAHU_KANAN, TANGAN_KIRI, TANGAN_KANAN];
+      // Titik penting tidak kelihatan
+      if (perlu.some(i => !t[i] || (t[i].visibility ?? 0) < AMBANG_NAMPAK)) {
+        return { status: "tiada", mesej: "Pastikan seluruh badan kelihatan", sudut: null };
+      }
+      // Kira sudut senget garisan bahu dari mendatar (0–90 darjah)
+      const dx = t[BAHU_KANAN].x - t[BAHU_KIRI].x;
+      const dy = t[BAHU_KANAN].y - t[BAHU_KIRI].y;
+      let sudut = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+      if (sudut > 90) sudut = 180 - sudut;
+
+      // Syarat 1: kedua-dua pergelangan tangan lebih tinggi daripada hidung (y lebih kecil = lebih tinggi)
+      if (!(t[TANGAN_KIRI].y < t[HIDUNG].y && t[TANGAN_KANAN].y < t[HIDUNG].y)) {
+        return { status: "salah", mesej: "Angkat kedua-dua tangan ke atas kepala", sudut };
+      }
+      // Syarat 2: badan senget mencukupi
+      if (sudut < AMBANG_SENGET_DARJAH) {
+        return { status: "salah", mesej: "Bengkokkan badan ke sisi lagi", sudut };
+      }
+      return { status: "betul", mesej: "Bagus! Sisi badan diregangkan", sudut };
+    }
+  }
+];
+
+/* =====================================================================
+   3. RUJUKAN ELEMEN & KEADAAN
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const video = $("video"), kanvas = $("kanvas"), ctx = kanvas.getContext("2d");
+const pentas = $("pentas"), panel = $("panel");
+const btnBuka = $("btnBuka"), btnTukar = $("btnTukar"), btnHenti = $("btnHenti");
+const cbBunyi = $("cbBunyi"), cbCermin = $("cbCermin");
+
+let regangan = SENARAI_REGANGAN[0];
+let pengesan = null;          // PoseLandmarker
+let strim = null;             // MediaStream kamera
+let hadapan = true;           // true = kamera hadapan, false = belakang
+let berjalan = false;         // gelung ramalan aktif
+let masaVideoTerakhir = -1;
+let statusPaparan = "tiada";  // status yang sedang dipaparkan
+let statusCalon = "tiada", kiraCalon = 0;
+let audioCtx = null;
+
+/* =====================================================================
+   4. KAD PILIHAN REGANGAN
+   ===================================================================== */
+function binaKad() {
+  const bekas = $("senaraiKad");
+  SENARAI_REGANGAN.forEach(r => {
+    const k = document.createElement("button");
+    k.className = "kad"; k.type = "button";
+    k.setAttribute("aria-pressed", r === regangan);
+    k.innerHTML = `<b>${r.nama}</b><span>${r.huraian}</span>`;
+    k.onclick = () => {
+      regangan = r;
+      bekas.querySelectorAll(".kad").forEach(x => x.setAttribute("aria-pressed", x === k));
+      paparKeputusan("tiada", "Pastikan seluruh badan kelihatan", null, true);
+    };
+    bekas.appendChild(k);
+  });
+}
+binaKad();
+
+/* =====================================================================
+   5. BUNYI (Web Audio) — dicipta selepas sentuhan pengguna supaya iPhone membenarkan
+   ===================================================================== */
+function sediakanAudio() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audioCtx = new AC();
+  }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+}
+function bunyiBetul() {
+  if (!cbBunyi.checked || !audioCtx) return;
+  const t = audioCtx.currentTime;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = "sine";
+  o.frequency.setValueAtTime(660, t);
+  o.frequency.setValueAtTime(880, t + 0.1);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t); o.stop(t + 0.3);
+}
+
+/* =====================================================================
+   6. PANEL KEPUTUSAN
+   ===================================================================== */
+function paparKeputusan(status, mesej, sudut, paksa = false) {
+  const lama = statusPaparan;
+  statusPaparan = status;
+  panel.className = status === "betul" ? "betul" : status === "salah" ? "salah" : "";
+  $("keputusan").textContent = status === "betul" ? "BETUL" : status === "salah" ? "SALAH" : "SEMAK";
+  $("mesej").textContent = mesej;
+  $("sudut").textContent = sudut == null ? "" : `Sudut senget bahu: ${Math.round(sudut)}° (sasaran ≥ ${AMBANG_SENGET_DARJAH}°)`;
+  if (status === "betul" && lama !== "betul" && !paksa) bunyiBetul();  // bunyi hanya apabila bertukar kepada BETUL
+}
+function tetapkanMenunggu() {
+  panel.className = "";
+  $("keputusan").textContent = "MENUNGGU";
+  $("mesej").textContent = "Buka kamera untuk mula";
+  $("sudut").textContent = "";
+  statusPaparan = "tiada"; statusCalon = "tiada"; kiraCalon = 0;
+}
+
+/* =====================================================================
+   7. MUAT TURUN MODEL POSE (sekali sahaja)
+   ===================================================================== */
+async function muatPengesan() {
+  if (pengesan) return pengesan;
+  const { PoseLandmarker, FilesetResolver } = await import(`${CDN}/+esm`);
+  const wasm = await FilesetResolver.forVisionTasks(`${CDN}/wasm`);
+  const pilihan = delegasi => ({
+    baseOptions: { modelAssetPath: MODEL, delegate: delegasi },
+    runningMode: "VIDEO",
+    numPoses: 1
+  });
+  try {
+    pengesan = await PoseLandmarker.createFromOptions(wasm, pilihan("GPU"));
+  } catch (e) {
+    // Sesetengah telefon (terutama iPhone lama) gagal dengan GPU, guna CPU
+    pengesan = await PoseLandmarker.createFromOptions(wasm, pilihan("CPU"));
+  }
+  pengesan.sambungan = PoseLandmarker.POSE_CONNECTIONS;
+  return pengesan;
+}
+
+/* =====================================================================
+   8. KAMERA
+   ===================================================================== */
+async function mulaKamera() {
+  tamatStrim();
+  strim = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: hadapan ? "user" : { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } },
+    audio: false
+  });
+  video.srcObject = strim;
+  await video.play();
+  await new Promise(r => video.videoWidth ? r() : (video.onloadedmetadata = r));
+  kanvas.width = video.videoWidth; kanvas.height = video.videoHeight;
+  pentas.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+}
+function tamatStrim() {
+  if (strim) { strim.getTracks().forEach(t => t.stop()); strim = null; }
+  video.srcObject = null;
+}
+
+async function bukaKamera() {
+  sediakanAudio();
+  btnBuka.disabled = true;
+  $("kosong").style.display = "grid";
+  $("kosong").textContent = "Memuatkan model… sila tunggu";
+  try {
+    await muatPengesan();
+    $("kosong").textContent = "Membuka kamera…";
+    await mulaKamera();
+    $("kosong").style.display = "none";
+    cbCermin.checked = hadapan; pentas.classList.toggle("cermin", hadapan);
+    btnTukar.disabled = false; btnHenti.disabled = false;
+    paparKeputusan("tiada", "Pastikan seluruh badan kelihatan", null, true);
+    if (!berjalan) { berjalan = true; requestAnimationFrame(gelung); }
+  } catch (e) {
+    console.error(e);
+    btnBuka.disabled = false;
+    $("kosong").textContent = (e && e.name === "NotAllowedError")
+      ? "Kebenaran kamera ditolak. Benarkan kamera dalam tetapan pelayar, kemudian cuba lagi."
+      : "Tidak dapat memulakan. Semak sambungan internet (untuk memuat model) dan kamera, kemudian cuba lagi.";
+  }
+}
+
+async function tukarKamera() {
+  hadapan = !hadapan;
+  btnTukar.disabled = true;
+  try {
+    await mulaKamera();
+    cbCermin.checked = hadapan; pentas.classList.toggle("cermin", hadapan);
+  } catch (e) {
+    hadapan = !hadapan;   // kembali ke kamera asal jika gagal
+    try { await mulaKamera(); } catch (_) {}
+  }
+  btnTukar.disabled = false;
+}
+
+function hentiKamera() {
+  berjalan = false;
+  tamatStrim();
+  ctx.clearRect(0, 0, kanvas.width, kanvas.height);
+  $("kosong").style.display = "grid";
+  $("kosong").textContent = "Kamera dihentikan. Tekan “Buka Kamera” untuk mula semula.";
+  btnBuka.disabled = false; btnTukar.disabled = true; btnHenti.disabled = true;
+  tetapkanMenunggu();
+}
+
+/* =====================================================================
+   9. GELUNG UTAMA: ramal pose, lukis, semak peraturan
+   ===================================================================== */
+function gelung() {
+  if (!berjalan) return;
+  if (video.readyState >= 2 && video.currentTime !== masaVideoTerakhir) {
+    masaVideoTerakhir = video.currentTime;
+    const hasil = pengesan.detectForVideo(video, performance.now());
+    ctx.clearRect(0, 0, kanvas.width, kanvas.height);
+    const t = hasil.landmarks && hasil.landmarks[0];
+    if (t) {
+      lukisBadan(t);
+      proses(regangan.semak(t));
+    } else {
+      proses({ status: "tiada", mesej: "Pastikan seluruh badan kelihatan", sudut: null });
+    }
+  }
+  requestAnimationFrame(gelung);
+}
+
+/* Elak kelipan: keputusan baru mesti sama beberapa bingkai berturut-turut */
+function proses(r) {
+  if (r.status === statusCalon) kiraCalon++; else { statusCalon = r.status; kiraCalon = 1; }
+  if (kiraCalon >= BINGKAI_STABIL || statusPaparan === "tiada" && r.status === "tiada") {
+    paparKeputusan(r.status, r.mesej, r.sudut);
+  } else if (r.status === statusPaparan) {
+    paparKeputusan(r.status, r.mesej, r.sudut);   // kemas kini mesej/sudut tanpa bunyi
+  }
+}
+
+/* =====================================================================
+   10. LUKISAN TITIK DAN GARISAN BADAN
+   ===================================================================== */
+function lukisBadan(t) {
+  const W = kanvas.width, H = kanvas.height;
+  const nampak = p => p && (p.visibility ?? 1) >= AMBANG_NAMPAK;
+  ctx.lineWidth = Math.max(3, W / 160);
+  ctx.strokeStyle = "rgba(255,255,255,.85)";
+  for (const { start, end } of pengesan.sambungan) {
+    if (!nampak(t[start]) || !nampak(t[end]) || start < 11 && end < 11) continue;   // langkau garisan muka
+    ctx.beginPath();
+    ctx.moveTo(t[start].x * W, t[start].y * H);
+    ctx.lineTo(t[end].x * W, t[end].y * H);
+    ctx.stroke();
+  }
+  // Garisan bahu diserlahkan kerana itulah yang diukur
+  if (nampak(t[BAHU_KIRI]) && nampak(t[BAHU_KANAN])) {
+    ctx.strokeStyle = "#ffc300"; ctx.lineWidth = Math.max(5, W / 100);
+    ctx.beginPath();
+    ctx.moveTo(t[BAHU_KIRI].x * W, t[BAHU_KIRI].y * H);
+    ctx.lineTo(t[BAHU_KANAN].x * W, t[BAHU_KANAN].y * H);
+    ctx.stroke();
+  }
+  // Titik
+  t.forEach((p, i) => {
+    if (!nampak(p) || (i > 0 && i < 11)) return;
+    const penting = [HIDUNG, BAHU_KIRI, BAHU_KANAN, TANGAN_KIRI, TANGAN_KANAN].includes(i);
+    ctx.fillStyle = penting ? "#ffc300" : "#4da3ff";
+    ctx.beginPath();
+    ctx.arc(p.x * W, p.y * H, penting ? W / 70 : W / 110, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+/* =====================================================================
+   11. PERISTIWA BUTANG
+   ===================================================================== */
+btnBuka.onclick = bukaKamera;
+btnTukar.onclick = tukarKamera;
+btnHenti.onclick = hentiKamera;
+cbCermin.onchange = () => pentas.classList.toggle("cermin", cbCermin.checked);
+document.addEventListener("visibilitychange", () => { if (document.hidden && strim) hentiKamera(); });
+</script>
+</body>
+</html>
